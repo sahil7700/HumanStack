@@ -12,8 +12,11 @@ datasource db {
 
 model User {
   id        String   @id @default(uuid())
-  clerkId   String   @unique // Auth mapped from Clerk
-  email     String   @unique
+  clerkId   String?  @unique // Optional now, since we bypass Clerk
+  email     String?  @unique
+  name      String?
+  age       Int?
+  weight    Float?
   role      Role     @default(USER)
   
   profile   Profile? // One-to-one relationship for onboarding data
@@ -68,9 +71,11 @@ model WorkoutPlan {
   
   title       String   // e.g., "Phase 1: Foundation & Posture Correction"
   focus       String   // e.g., "Hypertrophy + Core Stability"
-  startDate   DateTime
+  startDate   DateTime @default(now())
   endDate     DateTime?
   active      Boolean  @default(true)
+  
+  roadmapData Json?    // Full AI generated 4-week JSON plan
   
   sessions    WorkoutSession[] // The individual daily workouts generated for this plan
   

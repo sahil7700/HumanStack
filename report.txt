@@ -1,0 +1,888 @@
+
+
+
+
+Human Stack — V2 Upgrade Report
+Complete feature vision, AI dev prompts & build roadmap
+
+This document covers everything needed to transform Human Stack from a static protocol generator into a personalized, adaptive fitness coaching engine. It includes your two core feature ideas (fully fleshed out), additional high-impact features you may have missed, and ready-to-use AI prompts for every component.
+
+How to use this: Paste each prompt block directly into your AI coding tool (Cursor, Claude, ChatGPT, etc.) as the context for that feature build. The prompts are self-contained and ordered by build priority.
+
+Part 0 — What to Ignore from the Previous Report
+The previous AI report included several features that are technically interesting but wrong for this stage. Skip these:
+
+
+
+
+Wearable / Biometric Integration (WHOOP, Oura, Apple Health)
+Requires OAuth flows, hardware-specific APIs, ongoing maintenance, and user trust around health data permissions. Adds weeks of infra work for a feature most users won't set up. Skip for V2 — the RPE self-report system (covered in Feature 2) achieves 80% of the same adaptation with zero complexity.
+
+
+
+
+Computer Vision Posture Analysis
+Needs camera permissions, real-time ML inference, and reliable mobile handling. Still unreliable for web apps in 2025. If posture matters to your brand, use structured self-assessment sliders instead (3 questions, 10 seconds).
+
+
+
+
+Local AI / WebLLM (running LLM in-browser)
+Slow, heavy, and still fails on mobile. Use server-side API calls. Privacy can still be part of your brand positioning — just do not complicate your stack to achieve it technically.
+
+Part 1 — Your Two Core Features (Fully Specified)
+These are your original ideas, fleshed out into complete product specs. These are the features that make Human Stack different from every other fitness app.
+
+Feature 1: Adaptive Checkpoint Plans with Goal Shifting
+
+The core concept: The user sets a goal and a timeframe (e.g. 'get stronger in 12 weeks'). The AI builds a full plan broken into checkpoints every 2-3 weeks. At each checkpoint, the user reviews projected outcomes and can shift what they want — for example, changing from '20% mobility improvement' to '20% strength improvement'. The plan regenerates from that point forward while keeping all completed progress locked.
+
+How it works — user flow
+User completes onboarding: goal, timeframe, equipment, constraints
+AI generates a 12-week plan split into 4 checkpoints (weeks 3, 6, 9, 12)
+Each checkpoint shows: projected outcomes (plain language, not just percentages), actual completion rate, and a Goal Mixer
+Goal Mixer: 4 linked sliders (Strength / Endurance / Mobility / Fat Loss) that always sum to 100%
+When sliders change, a live preview panel shows what will change in the next 3 weeks
+User can write a reason for adjusting (optional, saved to history)
+On confirm: weeks from that checkpoint forward regenerate; completed weeks are locked forever
+The AI explains every change in plain language: 'Since you shifted toward strength, Tuesdays will now focus on progressive overload instead of circuit work'
+
+Key design rules
+Never remove mobility work entirely even if the user weights it at 0 — joint health is non-negotiable
+Show checkpoint outcomes as stories, not metrics: 'You should be able to do 3 pull-ups' not 'Upper body strength +18%'
+Lock icon on completed weeks — visual confirmation that progress is preserved
+History tab: every adjustment the user ever made + what changed as a result
+
+
+
+
+PROMPT 1A — Checkpoint Plan JSON Schema & Adaptive Logic (Backend)
+
+
+You are building the backend logic for an adaptive fitness plan system.
+Design a complete TypeScript implementation including types and functions.
+ 
+=== TYPES ===
+ 
+type GoalWeights = {
+  strength: number;      // 0-100, all four must sum to 100
+  endurance: number;
+  mobility: number;
+  fatLoss: number;
+};
+ 
+type CheckpointOutcome = {
+  label: string;         // Plain language: "Do 3 unassisted pull-ups"
+  metric: string;        // Numeric: "+18% upper push strength"
+  category: keyof GoalWeights;
+};
+ 
+type Checkpoint = {
+  week: number;
+  status: "upcoming" | "active" | "completed" | "adjusted";
+  projectedOutcomes: CheckpointOutcome[];
+  actualCompletionRate: number;   // 0-1, filled in when completed
+  userGoalWeights: GoalWeights;   // What goals were weighted at this checkpoint
+  adjustment: {
+    previousWeights: GoalWeights;
+    newWeights: GoalWeights;
+    reason: string;
+    adjustedAt: string;           // ISO date
+  } | null;
+};
+ 
+type Exercise = {
+  id: string;
+  name: string;
+  sets: number;
+  reps: string;                   // "8-10" or "30 seconds"
+  restSeconds: number;
+  muscleTarget: string;
+  formCue: string;                // One actionable sentence, never generic
+  commonMistake: string;          // One sentence
+  equipmentAlternatives: {
+    home: string;
+    travel: string;
+  };
+  adaptiveScaling: {
+    ifRPEAbove8: string;          // e.g. "reduce reps by 2"
+    ifRPEBelow6: string;          // e.g. "add 5% load"
+  };
+};
+ 
+type Day = {
+  dayNumber: number;              // 1-7
+  isRestDay: boolean;
+  focus: string;                  // e.g. "Upper push" or "Active recovery"
+  estimatedDurationMinutes: number;
+  exercises: Exercise[];
+  coachNote: string;              // 1-2 sentence, conversational
+};
+ 
+type Week = {
+  weekNumber: number;
+  isDeloadWeek: boolean;
+  theme: string;                  // e.g. "Volume building"
+  days: Day[];
+  locked: boolean;                // true once user completes this week
+};
+ 
+type CheckpointPlan = {
+  id: string;
+  userId: string;
+  createdAt: string;
+  goal: string;
+  durationWeeks: number;
+  currentWeek: number;
+  checkpoints: Checkpoint[];
+  weeks: Week[];
+};
+ 
+=== FUNCTIONS TO IMPLEMENT ===
+ 
+1. generatePlanFromGoals(
+     userId: string,
+     goal: string,
+     durationWeeks: number,
+     goalWeights: GoalWeights,
+     equipment: string[],
+     constraints: string[]
+   ): CheckpointPlan
+   
+   Rules:
+   - Insert checkpoints every 3 weeks
+   - Insert a deload week (50% volume) every 4th week automatically
+   - Never remove mobility work even if mobility weight = 0
+   - Distribute days based on goal weights:
+     strength > 60: 4 strength days, 1 endurance, 1 mobility, 1 rest
+     endurance > 60: 2 strength, 3 endurance, 1 mobility, 1 rest
+     balanced: 3 strength, 2 endurance, 1 mobility, 1 rest
+ 
+2. adjustPlanFromCheckpoint(
+     plan: CheckpointPlan,
+     checkpointIndex: number,
+     newGoalWeights: GoalWeights,
+     reason: string
+   ): CheckpointPlan
+   
+   Rules:
+   - Lock all weeks up to and including the checkpoint week
+   - Regenerate all weeks after the checkpoint with new goal weights
+   - Preserve streak data and completion rates on locked weeks
+   - Record the adjustment in the checkpoint object
+   - Return the full updated plan
+ 
+3. getNextCheckpointSummary(plan: CheckpointPlan): {
+     daysUntilCheckpoint: number;
+     projectedOutcomes: CheckpointOutcome[];
+     currentCompletionRate: number;
+     suggestedAdjustment: string | null;   // AI suggestion if completion < 70%
+   }
+ 
+Write full TypeScript. Include comments explaining the periodization logic.
+
+
+
+
+PROMPT 1B — Checkpoint UI / Goal Mixer Component (Frontend)
+
+
+Build a React + Tailwind 'Checkpoint Review' screen component.
+ 
+Props:
+  checkpoint: Checkpoint (see schema from Prompt 1A)
+  onKeepPlan: () => void
+  onApplyNewGoal: (weights: GoalWeights, reason: string) => void
+ 
+=== SCREEN LAYOUT (top to bottom) ===
+ 
+1. HEADER
+   - "Checkpoint 2 of 4 — Week 6" 
+   - Completion badge: "You completed 85% of sessions" (color-coded green/amber/red)
+ 
+2. OUTCOME REVIEW (two-column cards)
+   - Left: "What we projected" — list of CheckpointOutcome.label items
+   - Right: "What you actually did" — completion stats, avg RPE trend
+   - Design: muted card with subtle left border color-coded by goal category
+ 
+3. GOAL MIXER
+   - Label: "Adjust your goals for the next phase"
+   - 4 horizontal sliders: Strength, Endurance, Mobility, Fat Loss
+   - Each slider: label on left, value (e.g. "45%") on right
+   - All 4 sliders are LINKED — when one moves, others auto-balance proportionally
+   - "Total" indicator below all sliders: always shows 100% (green) or error if not (red)
+   - Implementation: when slider A changes by +10, distribute -10 proportionally across other three
+     based on their current values
+ 
+4. LIVE PREVIEW (debounced 500ms after slider change)
+   - Fade-in animation when it updates
+   - Text: "Based on your new mix, the next 3 weeks will..."
+   - 2-3 bullet points of plain language changes
+   - Call onGetPreview(newWeights) to fetch this from the AI
+ 
+5. REASON INPUT (optional)
+   - Textarea: "Why are you adjusting? (optional)"
+   - Placeholder: "e.g. My knee has been feeling better so I want to push strength more"
+   - Max 280 characters, character count shown
+ 
+6. CTA ROW
+   - "Keep current plan" (outline button) → calls onKeepPlan
+   - "Apply new goal" (filled button) → calls onApplyNewGoal(weights, reason)
+ 
+=== DESIGN ===
+- Dark mode: near-black background (#0A0A0A), warm white text
+- Single accent color: electric green (#39FF14) for active states and filled CTA
+- Sliders: custom styled, accent color fill on active side, dark track on inactive side
+- Smooth transitions on all interactive elements (200ms ease)
+- Font: monospaced for all numbers and percentages, sans-serif for labels
+- No rounded corners above 4px — sharp, precise aesthetic
+
+Feature 2: Day-by-Day Session Mode with Live Workout Flow
+
+Every day in the plan gets a full session view. The user taps 'Start Session' and enters a focused, distraction-free mode: exercises appear one at a time, timers run automatically, rest is tracked, and every set they complete is rated so the next one adapts. This is what turns Human Stack from an app you check into an app you actually train with.
+
+Session states (in order)
+INTRO — session overview: name, focus, exercise list, estimated time, 'Begin' CTA
+EXERCISE VIEW — one exercise at a time: large name, muscle badge, form cue, common mistake warning
+SET TIMER — countdown for current set (or rep display). Timer is the biggest element on screen
+RPE RATING — after each set: tap 1 of 3: Too Easy / Felt Right / Too Hard
+REST TIMER — auto-starts after RPE. Shows next set info. Can skip or extend. Beeps at 0
+EXERCISE COMPLETE — brief celebration before next exercise loads
+SESSION COMPLETE — total time, sets done, comparison to last week, coach note
+
+Key adaptive rules
+RPE 'Too Hard' → reduce next set's reps by 2
+RPE 'Too Easy' for 2 sets in a row → suggest adding 5% load next session
+If user skips more than 2 rest timers → coach note at end: 'Consider longer rest — it improves output'
+Session RPE data feeds back into the checkpoint plan's projections
+
+
+
+
+PROMPT 2 — Live Session Mode Component (Frontend)
+
+
+Build a React + Tailwind 'Live Session Mode' component.
+ 
+Session prop type:
+{
+  dayName: string;
+  focus: string;
+  estimatedDurationMinutes: number;
+  exercises: Array<{
+    id: string;
+    name: string;
+    sets: number;
+    reps: string;
+    restSeconds: number;
+    muscleTarget: string;
+    formCue: string;
+    commonMistake: string;
+  }>;
+}
+ 
+Callbacks:
+  onSessionComplete: (sessionLog: SessionLog) => void
+  onExitSession: () => void
+ 
+SessionLog type:
+{
+  completedAt: string;
+  totalTimeSeconds: number;
+  exerciseLogs: Array<{
+    exerciseId: string;
+    setsCompleted: number;
+    rpeRatings: Array<1 | 2 | 3>;   // 1=too easy, 2=felt right, 3=too hard
+    repsActual: number[];
+  }>;
+}
+ 
+=== STATES ===
+ 
+Type SessionState =
+  | { phase: 'INTRO' }
+  | { phase: 'EXERCISE_VIEW'; exerciseIndex: number }
+  | { phase: 'SET_TIMER'; exerciseIndex: number; setIndex: number; secondsLeft: number }
+  | { phase: 'RPE'; exerciseIndex: number; setIndex: number }
+  | { phase: 'REST'; exerciseIndex: number; setIndex: number; secondsLeft: number; nextSetReps: number }
+  | { phase: 'COMPLETE' }
+ 
+=== UI REQUIREMENTS ===
+ 
+INTRO:
+  - Full screen. Session name large at top
+  - Scrollable exercise list (name + sets x reps only)
+  - Estimated time badge
+  - Large 'Begin Session' CTA at bottom
+ 
+EXERCISE VIEW:
+  - Progress bar at top: "Exercise 2 of 5 | Set 1 of 3"
+  - Exercise name: large (40px), centered
+  - Muscle target badge (colored by muscle group)
+  - Form cue: green text, "checkmark icon" prefix
+  - Common mistake: amber text, "warning icon" prefix
+  - 'Start Set' button (large, accent color)
+  - 'Swap Exercise' button (small, ghost): calls onSwapExercise(id)
+ 
+SET TIMER:
+  - Full focus mode: hide all nav
+  - Timer: massive (120px font), countdown from reps x ~3 seconds or a fixed duration
+  - Current set / total sets indicator
+  - Rep target shown below timer
+  - Subtle pulsing animation on the number
+  - Web Audio API beep at 0: use oscillator, 880Hz, 200ms, soft envelope
+ 
+RPE (Rate of Perceived Exertion):
+  - Question: "How did that set feel?"
+  - 3 large tap targets:
+    - Too Easy (blue, left)
+    - Felt Right (green, center)  
+    - Too Hard (red, right)
+  - No timer — wait for user input
+  - Below: show what will change: "Felt right — next set stays at 10 reps"
+ 
+REST TIMER:
+  - Timer countdown (large, but smaller than set timer)
+  - "Resting" label above
+  - "Next up: Set 2 — 10 reps" below
+  - Two ghost buttons: "Skip Rest" and "+30 sec"
+  - Beep at 3, 2, 1, 0
+ 
+SESSION COMPLETE:
+  - Celebration header
+  - Stats: total time, exercises completed, sets done
+  - "Compared to last session" (if data exists)
+  - AI coach note (1-2 sentences based on session log)
+  - "Save & Exit" CTA
+ 
+=== ADAPTIVE LOGIC ===
+- Track rpeRatings per set in state
+- After each RPE submission, calculate nextSetReps:
+  if rating === 3 (too hard): nextSetReps = currentReps - 2
+  if rating === 1 (too easy) twice in a row: flag for load increase next session
+- Show the adjustment to the user before next set begins
+ 
+=== DESIGN ===
+- Dark mode only (#0A0A0A bg)
+- Accent: electric green (#39FF14) for timers, active states, primary CTAs
+- Full viewport height for timer phases — no scrolling during active set
+- Framer Motion for phase transitions: fade + slight upward translate, 200ms
+- All numbers: monospaced font
+- No bottom navigation visible during active session
+
+Part 2 — Additional Features You May Have Missed
+These are high-impact features not in your original plan that would significantly improve retention, personalization, and the quality of the product.
+
+Feature 3: Smart Onboarding (Calibration Session)
+Most fitness apps ask 3 generic questions and generate a plan. Human Stack should feel like talking to a real coach. A 5-minute onboarding flow that asks the right questions — not just 'what's your goal' but 'when did you last train consistently?', 'which movements cause you discomfort?', 'do you prefer morning or evening sessions?' — creates a plan that feels genuinely personal from day one.
+
+The last step of onboarding is a 'Calibration Session' — a short 10-minute session with 5 basic movements (push-up max, bodyweight squat, plank hold, broad jump, and a step test) done at home. The user reports their results. The AI uses these to calibrate starting loads, difficulty, and which exercises to include or exclude. This is the difference between a plan that fits and one that doesn't.
+
+
+
+
+PROMPT 3 — Onboarding Flow & Calibration Logic
+
+
+Build the onboarding flow for a fitness app. It has two parts: a question flow and a calibration session.
+ 
+=== PART A: QUESTION FLOW ===
+ 
+Build a multi-step onboarding component with these screens:
+ 
+Screen 1 — Goal
+  Question: "What do you most want to achieve?"
+  Options (single select, large tap targets):
+    - Get stronger
+    - Build endurance  
+    - Lose fat
+    - Move better (mobility/flexibility)
+    - All of the above (balanced)
+ 
+Screen 2 — Timeframe
+  Question: "How long do you want to commit to?"
+  Options: 6 weeks / 8 weeks / 12 weeks / 16 weeks
+ 
+Screen 3 — Experience
+  Question: "How would you describe your training history?"
+  Options:
+    - Never trained consistently
+    - Trained before, currently inactive (6+ months off)
+    - Train occasionally (1-2x/week)
+    - Train regularly (3+ times/week)
+ 
+Screen 4 — Equipment (multi-select)
+  Options: Bodyweight only / Resistance bands / Dumbbells / Barbell + rack / Machines / Full commercial gym
+ 
+Screen 5 — Schedule
+  Question: "How many days per week can you train?"
+  Slider: 2 to 6 days
+  Sub-question: "Morning or evening preference?" (affects recovery day placement)
+ 
+Screen 6 — Constraints (multi-select, optional)
+  "Any areas we should be careful with?"
+  Options: Lower back / Knees / Shoulders / Hips / Wrists / None
+ 
+Screen 7 — Calibration intro
+  Explain the calibration session. Show a list of 5 movements. 'Start calibration' CTA.
+ 
+=== PART B: CALIBRATION SESSION ===
+ 
+Guide the user through 5 self-assessment movements. After each, they input their result.
+ 
+1. Push-up test
+   Instruction: "Do as many controlled push-ups as you can. Stop when form breaks."
+   Input: number field (reps)
+   
+2. Bodyweight squat
+   Instruction: "Do 10 squats. Notice if you feel any discomfort. Rate your form comfort."
+   Input: slider 1-5 (1 = pain/discomfort, 5 = perfect)
+ 
+3. Plank hold
+   Instruction: "Hold a plank until you need to stop."
+   Input: timer (user starts/stops)
+ 
+4. Single-leg balance
+   Instruction: "Stand on one leg with eyes closed. How long until you lose balance?"
+   Input: seconds (both sides)
+ 
+5. Hip hinge (bodyweight)
+   Instruction: "Stand and hinge forward keeping back flat, touching your shins."
+   Input: slider 1-5 (1 = can't hinge, 5 = perfect)
+ 
+After all 5 inputs, compute a UserProfile object:
+{
+  strengthTier: "beginner" | "intermediate" | "advanced",
+  mobilityTier: "limited" | "moderate" | "good",
+  stabilityTier: "weak" | "moderate" | "strong",
+  startingLoads: {
+    upperPush: string;  // e.g. "Knee push-ups, 8 reps"
+    upperPull: string;
+    lowerPush: string;
+    lowerHinge: string;
+    core: string;
+  },
+  exercisesToAvoid: string[],
+  exercisesToEmphasize: string[]
+}
+ 
+Scoring logic:
+  push-ups:  <5=beginner, 5-15=intermediate, 15+=advanced
+  plank:     <20s=weak, 20-60s=moderate, 60s+=strong
+  hip hinge: <3=limited mobility, 3-4=moderate, 5=good
+  
+Return the UserProfile. This is passed to generatePlanFromGoals() as additional context.
+ 
+Design: clean, one question per screen, large tap targets, progress bar at top, back button always visible.
+
+Feature 4: The Swap Exercise Button
+Mid-session, if a user doesn't have the right equipment, their joint hurts, or they simply hate an exercise, they should be able to tap 'Swap' and instantly get an alternative that trains the same muscle. This is a small feature with massive daily impact — it removes the #1 reason people abandon a session ('I can't do that exercise today').
+
+
+
+
+PROMPT 4 — Exercise Swap API Call
+
+
+Build an API endpoint and frontend component for mid-session exercise swapping.
+ 
+ENDPOINT: POST /api/exercise/swap
+ 
+Request body:
+{
+  exerciseId: string;
+  reason: "no_equipment" | "joint_pain" | "dont_like" | "too_hard";
+  availableEquipment: string[];
+  constraints: string[];   // e.g. ["left knee sensitive"]
+  sessionContext: {
+    dayFocus: string;      // e.g. "Upper push"
+    completedExercises: string[];   // exercises already done this session
+  };
+}
+ 
+Prompt to send to the AI (build this on the server):
+"You are a sports scientist. The user is mid-session and cannot do [exercise name] because [reason].
+Their session focus is [dayFocus]. They have already completed [completedExercises].
+Available equipment: [equipment]. Constraints: [constraints].
+ 
+Suggest exactly 3 alternative exercises for the same primary muscle group.
+Return JSON only, no prose:
+{
+  alternatives: [
+    {
+      name: string,
+      sets: number,
+      reps: string,
+      muscleTarget: string,
+      whyThisWorks: string,    // one sentence explaining the substitution
+      formCue: string
+    }
+  ]
+}
+The alternatives must: train the same primary muscle, respect all constraints,
+use only available equipment, and not repeat any exercise already done today."
+ 
+Frontend: 
+When user taps 'Swap Exercise' in session mode:
+- Show a bottom sheet with loading state
+- Display 3 alternative cards with name, reps, and whyThisWorks
+- Tapping one swaps it into the session immediately (updates state)
+- Show a toast: "[Old exercise] swapped for [New exercise]"
+- Log the swap in the session log
+
+Feature 5: Progressive Overload Auto-Tracking
+Progressive overload — gradually increasing the challenge over time — is the single most important principle in fitness. Most apps leave this entirely to the user. Human Stack should handle it automatically: track what the user did last week, apply the right progression rule (beginners: add reps first, then weight; intermediate: wave loading), and show the updated numbers at the start of each set.
+
+
+
+
+PROMPT 5 — Progressive Overload Engine
+
+
+Build a progressive overload calculation engine in TypeScript.
+ 
+Types:
+type SetLog = {
+  weight: number | null;   // kg, null for bodyweight
+  reps: number;
+  rpe: 1 | 2 | 3;         // 1=too easy, 2=felt right, 3=too hard
+};
+ 
+type ExerciseHistory = {
+  exerciseId: string;
+  sessions: Array<{
+    date: string;
+    sets: SetLog[];
+  }>;
+};
+ 
+type ProgressionResult = {
+  suggestedWeight: number | null;
+  suggestedReps: number;
+  progressionNote: string;    // plain language explanation shown to user
+  progressionType: "add_reps" | "add_weight" | "deload" | "maintain";
+};
+ 
+Function: calculateNextSession(
+  exercise: Exercise,
+  history: ExerciseHistory,
+  userTier: "beginner" | "intermediate" | "advanced"
+): ProgressionResult
+ 
+Rules:
+BEGINNER (< 3 months consistent training):
+  - If last session avg RPE <= 2 (too easy): add 1-2 reps, keep weight
+  - If reps hit the top of target range AND RPE <= 2: add 2.5kg, reset reps to bottom of range
+  - If last session avg RPE >= 3 (too hard): maintain weight, keep reps
+  - Never increase weight and reps in the same session
+ 
+INTERMEDIATE (3+ months):
+  - Use wave loading: Week 1: high reps/low weight, Week 2: medium, Week 3: low reps/high weight, Week 4: deload
+  - Track which week of the wave they are in based on history length % 4
+  - If any set had RPE 3 in all sets: do not progress — repeat same session
+  
+DELOAD (applies to all):
+  - Every 4th week: 60% of normal weight, same reps, RPE should be 1 (easy)
+  - progressionType = "deload"
+ 
+Output the ProgressionResult with a human-readable progressionNote.
+Example: "Last week you hit 10 reps at 40kg feeling good. This week: try 42.5kg for 8 reps."
+ 
+Also write: getWeeklyProgressionSummary(history: ExerciseHistory[]): string
+Returns a 2-sentence plain language summary of the user's overall progress trend.
+
+Feature 6: Active Rest Day Plans
+Most fitness apps just say 'Rest Day' and leave users with nothing. This is a missed daily touchpoint. Human Stack should generate specific active recovery plans for rest days: a 15-minute mobility flow, a 20-minute walk target, breathing exercises, or foam rolling sequences. These keep users engaged on off-days and reinforce the habit without adding training stress.
+
+
+
+
+PROMPT 6 — Rest Day / Recovery Session Generator
+
+
+Build an AI prompt template that generates active recovery sessions for rest days.
+ 
+Call this prompt on rest days in the plan generator:
+ 
+System message:
+"You are a recovery specialist and sports physiotherapist. Generate an active recovery session
+for a rest day. These sessions should improve mobility, reduce soreness, and keep the user
+engaged without adding muscular stress."
+ 
+User message template:
+"Generate a rest day recovery session for a user who:
+- Trained their [lastTrainedMuscleGroups] in the last 48 hours
+- Has these constraints: [constraints]
+- Available equipment: [equipment]
+- Session should last: [15 | 20 | 30] minutes
+- Current focus area of their plan: [primaryGoal]
+ 
+Return JSON only:
+{
+  sessionType: 'mobility' | 'breathing' | 'light_walk' | 'foam_rolling' | 'yoga_flow',
+  title: string,           // e.g. 'Hip & thoracic flow'
+  durationMinutes: number,
+  activities: [
+    {
+      name: string,
+      durationSeconds: number,
+      instruction: string,   // one clear sentence
+      targetArea: string,
+      breathingCue: string   // optional, for breathing/yoga activities
+    }
+  ],
+  whyThisHelps: string     // one sentence explaining recovery benefit
+}"
+ 
+Frontend: Rest day sessions use the same Live Session mode as training days,
+but the UI accent color changes from green to blue to signal a different energy.
+Set timers count up (held for X seconds) rather than down.
+No RPE rating on rest day activities — instead ask "How does this area feel?" 
+with a 3-option response: "Tight / Normal / Loose".
+
+Feature 7: Landing Page — Interactive Mini Protocol Generator
+The landing page conversion problem: visitors don't understand what they'll get until they've already signed up. Fix this by showing them a sample AI-generated plan before any registration. A single form on the hero: 'I want to [goal] in [X weeks] with [equipment].' Click generate. Within 5 seconds, show them Day 1 of their plan. That's the hook. Registration comes after they've already seen the value.
+
+
+
+
+PROMPT 7 — Landing Page Interactive Demo
+
+
+Build a landing page 'Try It Free' section component in React + Tailwind.
+ 
+This is a mini protocol generator that works WITHOUT requiring login.
+It shows a sample Day 1 plan to demonstrate the product's value.
+ 
+=== FORM (step 1) ===
+Three inputs, all inline on desktop / stacked on mobile:
+ 
+1. Goal select: "I want to..." 
+   Options: Get stronger / Build endurance / Lose fat / Move better
+ 
+2. Timeframe select: "...in..."
+   Options: 6 weeks / 8 weeks / 12 weeks / 16 weeks
+ 
+3. Equipment select: "...using..."
+   Options: Bodyweight only / Home gym / Full gym
+ 
+Large CTA button: "Generate My Day 1 Plan →"
+ 
+=== LOADING STATE ===
+Replace button with a progress bar and rotating messages:
+  - "Analyzing your goal..."
+  - "Designing your first session..."
+  - "Calculating the right intensity..."
+Show for 2-3 seconds even if API returns faster (feel matters)
+ 
+=== RESULT (step 2) ===
+Show a 'Day 1 Preview' card:
+  - Session name and focus
+  - Estimated duration
+  - 3 exercises (not the full session) with sets/reps
+  - A coach note from the AI
+  - A subtle "Full plan includes 12 weeks of sessions like this" caption
+ 
+Below the card:
+  - Primary CTA: "Get Your Full 12-Week Plan — Free" → /signup
+  - Secondary: "See another example" → regenerate with same inputs
+ 
+=== API CALL ===
+POST /api/demo/generate
+Body: { goal, timeframe, equipment }
+ 
+Server-side AI prompt:
+"Generate a Day 1 workout preview for a new user. Goal: [goal]. Equipment: [equipment].
+Return JSON only:
+{
+  sessionName: string,
+  focus: string,
+  durationMinutes: number,
+  exercises: [{ name, sets, reps, muscleTarget }],   // exactly 3
+  coachNote: string    // 1 sentence, encouraging and specific
+}"
+ 
+Design: The result card should look exactly like the in-app session card.
+This is a preview of the real product, not a simplified version.
+No login required to see this. Rate limit by IP: max 5 calls per hour.
+
+Part 3 — UI & Dashboard Redesign
+The current dashboard feels like a landing page, not a training tool. The redesign should feel like a command center: data-forward, precise, and functional. Here is the complete dashboard redesign brief.
+
+
+
+
+PROMPT 8 — Full Dashboard Redesign
+
+
+Redesign the Human Stack fitness dashboard in React + Tailwind.
+ 
+=== DESIGN SYSTEM ===
+Background: #0A0A0A (near-black)
+Primary text: #F0F0F0
+Secondary text: #888888
+Accent (primary): #39FF14 (electric green — used sparingly)
+Accent (secondary): #00D9FF (cyan — for endurance/rest related elements)
+Warning: #F5A623 (amber)
+Font headings: 'Syne' or 'DM Sans' (import from Google Fonts)
+Font numbers/stats: 'JetBrains Mono' or 'IBM Plex Mono' (monospaced)
+Border radius: 4px max (sharp aesthetic)
+Borders: 1px solid #222222
+ 
+=== THREE ZONES ===
+ 
+ZONE 1 — TODAY'S SESSION (top, 40% viewport height)
+Large hero card. Content:
+  - "Day 4 of 84" in monospaced, small, muted
+  - Session name: large (32px), e.g. "Lower Body Push"
+  - Focus badge: colored dot + "Legs & Glutes"
+  - Muscle groups: small icon row (colored squares for each muscle)
+  - Duration: "42 min" in monospaced
+  - Equipment needed: icon row
+  - CTA: "Start Session" — large, full-width, accent green background
+  - Secondary: "View full plan for today" text link
+ 
+ZONE 2 — CHECKPOINT PROGRESS (middle strip)
+  - Horizontal progress bar with checkpoint dots (weeks 3, 6, 9, 12)
+  - Current position marker (glowing green dot)
+  - Left label: "Week 4 of 12"
+  - Right label: "Next checkpoint: 11 days"
+  - Below bar: goal mix pills — "60% Strength · 25% Endurance · 15% Mobility"
+ 
+ZONE 3 — BOTTOM TWO COLUMNS
+  Left column: MUSCLE HEATMAP
+    - 6 zone grid: Chest / Back / Shoulders / Arms / Legs / Core
+    - Each zone: a small rounded square, colored by training frequency this week
+      0 sessions = #1A1A1A (dark)
+      1 session = #1A3A1A
+      2 sessions = #2A5A2A  
+      3+ sessions = #39FF14 (full accent)
+    - Zone label below each square (monospaced, 11px)
+    - Title: "This week's training" 
+ 
+  Right column: STATS
+    - Streak counter: large number + "day streak" label
+    - Sessions this week: X of Y
+    - Avg session RPE this week: colored number (green/amber/red)
+    - Total training time this week: "3h 20m"
+ 
+=== COMPONENT EXPORTS ===
+Export: SessionHeroCard, CheckpointProgressBar, MuscleHeatmap, WeeklyStats, Dashboard
+Dashboard composes all four.
+ 
+No sidebar. No bottom nav on desktop. Mobile: bottom nav with 3 items (Today, Plan, Progress).
+
+Part 4 — Build Order & Priority
+Build in this order. Each step builds on the last. Do not skip to UI before the core session loop works.
+
+
+
+
+Feature
+
+
+Priority
+
+
+Why
+
+
+Smart Onboarding + Calibration (Prompt 3)
+
+
+Week 1 — Build first
+
+
+No plan quality without good user data
+
+
+Day plan AI generation (embedded in Prompt 2)
+
+
+Week 1 — Build first
+
+
+Needed before session mode can work
+
+
+Live Session Mode (Prompt 2)
+
+
+Week 1 — Ship first
+
+
+Highest daily usage — core product loop
+
+
+Exercise Swap button (Prompt 4)
+
+
+Week 1 — Small, high impact
+
+
+Removes #1 reason people abandon sessions
+
+
+Checkpoint plan schema (Prompt 1A)
+
+
+Week 2
+
+
+Backend foundation for adaptive plans
+
+
+Progressive Overload engine (Prompt 5)
+
+
+Week 2
+
+
+Makes the plan get harder automatically
+
+
+Checkpoint UI / Goal Mixer (Prompt 1B)
+
+
+Week 2
+
+
+The flagship differentiating feature
+
+
+Rest Day recovery sessions (Prompt 6)
+
+
+Week 3
+
+
+Daily engagement on off days
+
+
+Dashboard redesign (Prompt 8)
+
+
+Week 3
+
+
+Converts first impressions — build after core flows
+
+
+Landing page demo generator (Prompt 7)
+
+
+Week 4
+
+
+Marketing conversion — build last
+
+
+One-Line Product Vision
+
+
+
+
+Human Stack should be the only fitness app where the plan changes when you change.
+Not just when you miss a session — but when your goals evolve. Every other app locks you into the plan you made on day one. Human Stack adapts it with you, checkpoint by checkpoint, session by session.
+
+End of Report

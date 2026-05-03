@@ -7,28 +7,15 @@ export const maxDuration = 60; // Allow Vercel to wait up to 60 seconds for the 
 
 export async function POST(req: Request) {
   try {
-    // 1. Authenticate the user with Clerk
-    const user = await currentUser();
-    
-    // For local testing without full auth, we can bypass strictly throwing
-    // But in production, we MUST return 401 Unauthorized if no clerkId
-    let dbUser = null;
-    if (user) {
-      dbUser = await prisma.user.upsert({
-        where: { clerkId: user.id },
-        update: {},
-        create: {
-          clerkId: user.id,
-          email: user.emailAddresses[0]?.emailAddress || `${user.id}@clerk.local`
-        }
-      });
-    }
-
     const { 
-      goals, priorityNotes, age, weight, posture, postureNotes,
-      pushups, pullups, equipment, equipmentNotes, injuries, daysPerWeek, 
-      workoutDuration, lifestyle, motivationOptions, motivation 
+      goal, timeframe, experience, equipment, daysPerWeek, 
+      timePreference, constraints, userProfile, userId 
     } = await req.json();
+
+    let dbUser = null;
+    if (userId) {
+      dbUser = await prisma.user.findUnique({ where: { id: userId } });
+    }
 
     let planData: any = null;
 
@@ -45,34 +32,31 @@ export async function POST(req: Request) {
 You are designing a strictly formatted JSON workout plan for a user based on their holistic assessment.
 
 USER PROFILE:
-- Age: ${age}, Weight: ${weight}
-- Goals: ${goals.join(", ")}
-- Priority/Notes: ${priorityNotes || "None provided"}
-- Posture Issues: ${posture.join(", ") || "None"}
-- Additional Posture Notes: ${postureNotes || "None"}
-- Injuries/Limitations: ${injuries || "None"}
+- Goal: ${goal}
+- Timeframe: ${timeframe}
+- Training Experience: ${experience}
+- Constraints / Areas to avoid: ${constraints.join(", ")}
 
-CAPABILITIES (Judge their level based on this):
-- Max Push-ups: ${pushups}
-- Max Pull-ups: ${pullups}
+CALIBRATION RESULTS (Provided by AI System):
+- Strength Tier: ${userProfile.strengthTier}
+- Mobility Tier: ${userProfile.mobilityTier}
+- Stability Tier: ${userProfile.stabilityTier}
+- Avoid Exercises: ${userProfile.exercisesToAvoid.join(", ")}
+- Starting Loads: ${JSON.stringify(userProfile.startingLoads)}
 
 EQUIPMENT ARSENAL:
 - Selected: ${equipment.join(", ")}
-- Additional Equipment Notes: ${equipmentNotes || "None"}
 
 LOGISTICS & REALITY:
-- Can train: ${daysPerWeek}
-- Session Length: ${workoutDuration}
-- Lifestyle & Energy: ${lifestyle}
-- Core Motivators: ${motivationOptions.join(", ")}
-- Deep Motivation (Custom): ${motivation}
+- Can train: ${daysPerWeek} days per week
+- Time Preference: ${timePreference}
 
 INSTRUCTIONS:
 1. Generate a structured 1-week plan that perfectly fits the ${daysPerWeek} limit.
-2. If they have posture issues, include corrective exercises as part of the warm-up or main workout.
-3. If they have low energy/high stress, do not prescribe 6-day intense splits. Focus on recovery.
-4. Add specific 'Coach Notes' reminding them of their deep motivation.
-5. Provide realistic Sets and Reps based on their equipment and their actual max pushups/pullups.
+2. If they have constraints, include corrective exercises as part of the warm-up or main workout and avoid restricted exercises.
+3. Incorporate their starting loads correctly.
+4. Add specific 'Coach Notes' reminding them of their progression.
+5. Provide realistic Sets and Reps based on their equipment and their actual tier.
 
 OUTPUT STRICTLY VALID JSON MATCHING THIS EXACT SCHEMA AND NOTHING ELSE (DO NOT WRAP IN MARKDOWN):
 {
@@ -103,7 +87,7 @@ OUTPUT STRICTLY VALID JSON MATCHING THIS EXACT SCHEMA AND NOTHING ELSE (DO NOT W
       console.log("No Gemini key found. Using Mock Data.");
       planData = {
         planName: "Mock Foundation Plan",
-        focus: goals.join(", ") || "General Fitness",
+        focus: goal || "General Fitness",
         sessions: [
           {
             day: "Day 1",
@@ -122,32 +106,45 @@ OUTPUT STRICTLY VALID JSON MATCHING THIS EXACT SCHEMA AND NOTHING ELSE (DO NOT W
         properties: {
           planName: { type: SchemaType.STRING },
           focus: { type: SchemaType.STRING },
-          sessions: {
+          durationWeeks: { type: SchemaType.INTEGER },
+          weeks: {
             type: SchemaType.ARRAY,
             items: {
               type: SchemaType.OBJECT,
               properties: {
-                day: { type: SchemaType.STRING, description: "e.g. Monday" },
-                name: { type: SchemaType.STRING, description: "e.g. Upper Body" },
-                exercises: {
+                weekNumber: { type: SchemaType.INTEGER },
+                days: {
                   type: SchemaType.ARRAY,
                   items: {
                     type: SchemaType.OBJECT,
                     properties: {
-                      name: { type: SchemaType.STRING },
-                      sets: { type: SchemaType.INTEGER },
-                      reps: { type: SchemaType.STRING },
-                      notes: { type: SchemaType.STRING }
+                      dayNumber: { type: SchemaType.INTEGER, description: "1 to 7" },
+                      isRestDay: { type: SchemaType.BOOLEAN },
+                      focus: { type: SchemaType.STRING, description: "e.g. Upper Body or Recovery" },
+                      estimatedDurationMinutes: { type: SchemaType.INTEGER },
+                      exercises: {
+                        type: SchemaType.ARRAY,
+                        items: {
+                          type: SchemaType.OBJECT,
+                          properties: {
+                            name: { type: SchemaType.STRING },
+                            sets: { type: SchemaType.INTEGER },
+                            reps: { type: SchemaType.STRING },
+                            notes: { type: SchemaType.STRING }
+                          },
+                          required: ["name", "sets", "reps", "notes"]
+                        }
+                      }
                     },
-                    required: ["name", "sets", "reps", "notes"]
+                    required: ["dayNumber", "isRestDay", "exercises"]
                   }
                 }
               },
-              required: ["day", "name", "exercises"]
+              required: ["weekNumber", "days"]
             }
           }
         },
-        required: ["planName", "focus", "sessions"]
+        required: ["planName", "focus", "durationWeeks", "weeks"]
       };
 
       const model = genAI.getGenerativeModel({ 
@@ -159,34 +156,31 @@ OUTPUT STRICTLY VALID JSON MATCHING THIS EXACT SCHEMA AND NOTHING ELSE (DO NOT W
 You are designing a strictly formatted JSON workout plan for a user based on their holistic assessment.
 
 USER PROFILE:
-- Age: ${age}, Weight: ${weight}
-- Goals: ${goals.join(", ")}
-- Priority/Notes: ${priorityNotes || "None provided"}
-- Posture Issues: ${posture.join(", ") || "None"}
-- Additional Posture Notes: ${postureNotes || "None"}
-- Injuries/Limitations: ${injuries || "None"}
+- Goal: ${goal}
+- Timeframe: ${timeframe}
+- Training Experience: ${experience}
+- Constraints / Areas to avoid: ${constraints.join(", ")}
 
-CAPABILITIES (Judge their level based on this):
-- Max Push-ups: ${pushups}
-- Max Pull-ups: ${pullups}
+CALIBRATION RESULTS (Provided by AI System):
+- Strength Tier: ${userProfile.strengthTier}
+- Mobility Tier: ${userProfile.mobilityTier}
+- Stability Tier: ${userProfile.stabilityTier}
+- Avoid Exercises: ${userProfile.exercisesToAvoid.join(", ")}
+- Starting Loads: ${JSON.stringify(userProfile.startingLoads)}
 
 EQUIPMENT ARSENAL:
 - Selected: ${equipment.join(", ")}
-- Additional Equipment Notes: ${equipmentNotes || "None"}
 
 LOGISTICS & REALITY:
-- Can train: ${daysPerWeek}
-- Session Length: ${workoutDuration}
-- Lifestyle & Energy: ${lifestyle}
-- Core Motivators: ${motivationOptions.join(", ")}
-- Deep Motivation (Custom): ${motivation}
+- Can train: ${daysPerWeek} days per week
+- Time Preference: ${timePreference}
 
 INSTRUCTIONS:
-1. Generate a structured 1-week plan that perfectly fits the ${daysPerWeek} limit.
-2. If they have posture issues, include corrective exercises as part of the warm-up or main workout.
-3. If they have low energy/high stress, do not prescribe 6-day intense splits. Focus on recovery.
-4. Add specific 'Coach Notes' reminding them of their deep motivation.
-5. Provide realistic Sets and Reps based on their equipment and their actual max pushups/pullups.
+1. Generate a structured 4-week roadmap that perfectly fits the ${daysPerWeek} limit.
+2. For each week, provide exactly 7 days (dayNumber 1 to 7). If they shouldn't train on a day, set isRestDay to true and provide an empty exercises array.
+3. If they have constraints, include corrective exercises and avoid restricted exercises.
+4. Incorporate their starting loads correctly. Provide realistic Sets and Reps based on their equipment and their actual tier.
+5. Create a progressive overload scheme across the 4 weeks (e.g., Week 4 is a deload or checkpoint).
 
 Respond strictly in JSON matching the schema.`;
 
@@ -200,35 +194,40 @@ Respond strictly in JSON matching the schema.`;
     }
 
     // 3. Save to Database (If user is authenticated)
-    if (dbUser && planData && planData.sessions) {
+    if (dbUser && planData && planData.weeks) {
       console.log("Saving generated plan to database for user:", dbUser.id);
       
-      // We use a Prisma Nested Write to save the Plan -> Sessions -> Exercises -> Sets all at once!
+      const allSessions = planData.weeks.flatMap((w: any) => w.days.filter((d:any) => !d.isRestDay).map((d: any) => {
+          return {
+              name: d.focus || `Day ${d.dayNumber}`,
+              exercises: d.exercises || []
+          };
+      }));
+
       await prisma.workoutPlan.create({
         data: {
           userId: dbUser.id,
           title: planData.planName || "Custom Protocol",
           focus: planData.focus || "General Fitness",
           startDate: new Date(),
+          roadmapData: planData,
           sessions: {
-            create: planData.sessions.map((session: any, i: number) => ({
+            create: allSessions.map((session: any, i: number) => ({
               userId: dbUser.id,
-              name: session.name || `Day ${i + 1}`,
-              scheduledFor: new Date(Date.now() + i * 24 * 60 * 60 * 1000), // schedule 1 day apart
+              name: session.name,
+              scheduledFor: new Date(Date.now() + i * 24 * 60 * 60 * 1000),
               exercises: {
                 create: (session.exercises || []).map((ex: any, j: number) => {
                   const safeRepsString = ex.reps ? String(ex.reps) : "10";
                   return {
                     order: j,
                     notes: ex.notes || "",
-                    // connectOrCreate ensures we build a global catalog of exercises
                     exercise: {
                       connectOrCreate: {
                         where: { name: ex.name || "Unknown Exercise" },
                         create: { name: ex.name || "Unknown Exercise", targetMuscle: "AI Generated" }
                       }
                     },
-                    // Create the targets for the specific sets
                     sets: {
                       create: Array.from({ length: Number(ex.sets) || 3 }).map((_, setIdx) => ({
                         setNumber: setIdx + 1,

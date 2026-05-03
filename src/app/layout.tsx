@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Syne, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const syne = Syne({ 
+  subsets: ["latin"],
+  variable: "--font-syne",
+});
+
+const jetbrainsMono = JetBrains_Mono({ 
+  subsets: ["latin"],
+  variable: "--font-mono",
+});
 
 export const metadata: Metadata = {
   title: "HumanStack - Intelligent Fitness",
@@ -19,7 +27,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body className={`${inter.className} min-h-screen bg-background font-sans antialiased`}>
+        <body className={`${syne.variable} ${jetbrainsMono.variable} min-h-screen bg-background font-sans antialiased`}>
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"

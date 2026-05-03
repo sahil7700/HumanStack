@@ -29,14 +29,8 @@ export default async function Home() {
               </Link>
             ) : (
               <>
-                <Link href="/sign-in" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">
-                  Log in
-                </Link>
-                <Link 
-                  href="/sign-up" 
-                  className="text-sm font-medium bg-white text-black px-4 py-2 rounded-full hover:bg-zinc-200 transition-colors"
-                >
-                  Get Started
+                <Link href="/sign-in" className="text-sm font-medium bg-white text-black px-6 py-2 rounded-full hover:bg-zinc-200 transition-colors">
+                  Enter System
                 </Link>
               </>
             )}
@@ -73,10 +67,10 @@ export default async function Home() {
             
             <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
               <Link 
-                href={userId ? "/dashboard" : "/sign-up"} 
-                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-black px-8 py-4 rounded-full font-medium hover:scale-105 transition-transform duration-200"
+                href="/sign-in" 
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#39FF14] text-black px-8 py-4 rounded-full font-bold hover:scale-105 transition-transform duration-200 shadow-[0_0_20px_rgba(57,255,20,0.2)]"
               >
-                Initialize Protocol
+                Access System
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <a 
@@ -90,47 +84,6 @@ export default async function Home() {
           </div>
         </div>
       </main>
-
-      {/* BENTO BOX FEATURES SECTION */}
-      <section id="architecture" className="py-24 bg-[#09090b] border-t border-white/5">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">The Stack</h2>
-            <p className="text-zinc-400 max-w-xl">Every component of the protocol is generated specifically to prevent injury and force adaptation.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Box 1 */}
-            <div className="col-span-1 md:col-span-2 bg-gradient-to-b from-white/5 to-transparent border border-white/10 p-8 rounded-3xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-8 opacity-20 group-hover:opacity-100 transition-opacity">
-                <Brain className="w-32 h-32 text-white/20" />
-              </div>
-              <div className="relative z-10">
-                <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6 border border-white/10">
-                  <Activity className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-2xl font-semibold mb-3">Hyper-Personalized AI</h3>
-                <p className="text-zinc-400 max-w-md leading-relaxed">
-                  Your protocol isn't a template. The AI ingests your posture deficits and creates targeted corrective exercises directly into your warm-up and primary lifts.
-                </p>
-              </div>
-            </div>
-
-            {/* Box 2 */}
-            <div className="col-span-1 bg-gradient-to-b from-white/5 to-transparent border border-white/10 p-8 rounded-3xl">
-              <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6 border border-white/10">
-                <Shield className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">Clinical Precision</h3>
-              <p className="text-zinc-400 leading-relaxed text-sm">
-                Prioritizing joint longevity over ego lifting. If you select rounded shoulders, expect face pulls and Y-raises.
-              </p>
-            </div>
-
-          </div>
-        </div>
-      </section>
 
       {/* MINIMAL FOOTER */}
       <footer className="border-t border-white/5 py-12">
