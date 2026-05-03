@@ -83,7 +83,7 @@ export default async function DashboardPage() {
         <section className="mb-20">
           <h2 className="text-lg font-medium text-zinc-100 mb-6">Weekly Structure</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {activePlan.sessions.map((session, i) => (
+            {activePlan.sessions.map((session: any, i: number) => (
               <div key={`overview-${session.id}`} className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-5">
                 <div className="text-xs text-zinc-500 mb-2">Day {i + 1}</div>
                 <div className="font-medium text-zinc-200 mb-1">{session.name}</div>
@@ -98,7 +98,7 @@ export default async function DashboardPage() {
           <h2 className="text-lg font-medium text-zinc-100 mb-6">Daily Protocols</h2>
           
           <div className="space-y-4">
-            {activePlan.sessions.map((session, i) => (
+            {activePlan.sessions.map((session: any, i: number) => (
               <details 
                 key={session.id} 
                 className="group bg-zinc-900/30 border border-zinc-800/80 rounded-lg overflow-hidden transition-all open:bg-zinc-900/50 open:border-zinc-700" 
@@ -116,7 +116,7 @@ export default async function DashboardPage() {
                 
                 <div className="px-5 pb-5 pt-2">
                   <div className="space-y-6">
-                    {session.exercises.map((workoutEx) => (
+                    {session.exercises.map((workoutEx: any) => (
                       <div key={workoutEx.id} className="pt-4 border-t border-zinc-800/50 first:border-0 first:pt-0">
                         
                         <div className="flex flex-col md:flex-row md:items-baseline justify-between mb-3 gap-2">
