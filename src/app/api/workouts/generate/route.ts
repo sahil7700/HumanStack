@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 
+export const maxDuration = 60; // Allow Vercel to wait up to 60 seconds for the AI
+
 export async function POST(req: Request) {
   try {
     // 1. Authenticate the user with Clerk
