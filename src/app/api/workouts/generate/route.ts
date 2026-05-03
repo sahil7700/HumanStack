@@ -33,7 +33,73 @@ export async function POST(req: Request) {
     let planData: any = null;
 
     // 2. Generate the Plan (Mock or Real)
-    if (!process.env.GEMINI_API_KEY) {
+    if (process.env.GROQ_API_KEY) {
+      console.log("Calling Free Groq API (Llama 3.3)...");
+      const { OpenAI } = require("openai");
+      const groq = new OpenAI({
+        apiKey: process.env.GROQ_API_KEY,
+        baseURL: "https://api.groq.com/openai/v1",
+      });
+
+      const prompt = `You are an elite, world-class athletic coach and physical therapist. 
+You are designing a strictly formatted JSON workout plan for a user based on their holistic assessment.
+
+USER PROFILE:
+- Age: ${age}, Weight: ${weight}
+- Goals: ${goals.join(", ")}
+- Priority/Notes: ${priorityNotes || "None provided"}
+- Posture Issues: ${posture.join(", ") || "None"}
+- Additional Posture Notes: ${postureNotes || "None"}
+- Injuries/Limitations: ${injuries || "None"}
+
+CAPABILITIES (Judge their level based on this):
+- Max Push-ups: ${pushups}
+- Max Pull-ups: ${pullups}
+
+EQUIPMENT ARSENAL:
+- Selected: ${equipment.join(", ")}
+- Additional Equipment Notes: ${equipmentNotes || "None"}
+
+LOGISTICS & REALITY:
+- Can train: ${daysPerWeek}
+- Session Length: ${workoutDuration}
+- Lifestyle & Energy: ${lifestyle}
+- Core Motivators: ${motivationOptions.join(", ")}
+- Deep Motivation (Custom): ${motivation}
+
+INSTRUCTIONS:
+1. Generate a structured 1-week plan that perfectly fits the ${daysPerWeek} limit.
+2. If they have posture issues, include corrective exercises as part of the warm-up or main workout.
+3. If they have low energy/high stress, do not prescribe 6-day intense splits. Focus on recovery.
+4. Add specific 'Coach Notes' reminding them of their deep motivation.
+5. Provide realistic Sets and Reps based on their equipment and their actual max pushups/pullups.
+
+OUTPUT STRICTLY VALID JSON MATCHING THIS EXACT SCHEMA AND NOTHING ELSE (DO NOT WRAP IN MARKDOWN):
+{
+  "planName": "string",
+  "focus": "string",
+  "sessions": [
+    {
+      "day": "Day 1",
+      "name": "Upper Body",
+      "exercises": [
+        { "name": "Pushups", "sets": 3, "reps": "10", "notes": "Keep core tight" }
+      ]
+    }
+  ]
+}`;
+
+      const response = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+      });
+
+      const rawText = response.choices[0].message.content;
+      planData = JSON.parse(rawText);
+
+    } else if (!process.env.GEMINI_API_KEY) {
       console.log("No Gemini key found. Using Mock Data.");
       planData = {
         planName: "Mock Foundation Plan",
