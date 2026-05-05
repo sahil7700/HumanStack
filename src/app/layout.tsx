@@ -1,22 +1,28 @@
 import type { Metadata } from "next";
-import { Syne, JetBrains_Mono } from "next/font/google";
+import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const syne = Syne({ 
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
-  variable: "--font-syne",
+  variable: "--font-heading",
+  weight: ["400", "500", "600", "700"],
 });
 
-const jetbrainsMono = JetBrains_Mono({ 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-body",
+});
+
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
-  title: "HumanStack - Intelligent Fitness",
-  description: "AI-powered fitness platform optimizing for long-term health and performance.",
+  title: "HumanStack — AI-Powered Fitness Intelligence",
+  description: "Train smarter, not harder. AI-driven personalized fitness protocols built around you.",
 };
 
 export default function RootLayout({
@@ -27,11 +33,13 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
-        <body className={`${syne.variable} ${jetbrainsMono.variable} min-h-screen bg-background font-sans antialiased`}>
+        <body
+          className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} min-h-screen bg-[#0A0A0A] font-body antialiased`}
+        >
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"
-            enableSystem
+            enableSystem={false}
             disableTransitionOnChange
           >
             {children}
